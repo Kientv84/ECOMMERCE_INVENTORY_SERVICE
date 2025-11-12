@@ -3,13 +3,15 @@ package com.ecommerce.inventory.services;
 import com.ecommerce.inventory.commons.TransactionType;
 import com.ecommerce.inventory.dtos.requests.ProductInventoryRequest;
 import com.ecommerce.inventory.dtos.requests.ProductInventoryUpdateRequest;
+import com.ecommerce.inventory.dtos.requests.kafka.KafkaInventoryRequest;
 import com.ecommerce.inventory.dtos.responses.ProductInventoryResponse;
+import com.ecommerce.inventory.dtos.responses.kafka.KafkaEventInventory;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface ProductInventoryService {
-    ProductInventoryResponse create(ProductInventoryRequest request);
+    ProductInventoryResponse create(KafkaInventoryRequest message);
 
     List<ProductInventoryResponse> getAll();
 
@@ -21,13 +23,13 @@ public interface ProductInventoryService {
 
     void recordTransaction(UUID orderId, UUID productId, int quantity, TransactionType type, String source);
 
-    void deductInventory(UUID orderId, List<ItemDTO> items, String source);      // Trừ kho khi thanh toán
+    void deductInventory(KafkaEventInventory message);      // Trừ kho khi thanh toán
 
-    void reserveInventory(UUID orderId, List<ItemDTO> items, String source);     // Giữ hàng (COD hoặc đơn online)
+    void reserveInventory(KafkaEventInventory message);     // Giữ hàng (COD hoặc đơn online)
 
-    void releaseReserved(UUID orderId, List<ItemDTO> items, String reason);      // Hoàn kho khi hủy hoặc bom hàng
+    void releaseReserved(KafkaEventInventory message);      // Hoàn kho khi hủy hoặc bom hàng
 
-    void confirmSold(UUID orderId, List<ItemDTO> items);
+    void confirmSold(KafkaEventInventory message);
 
 }
 
