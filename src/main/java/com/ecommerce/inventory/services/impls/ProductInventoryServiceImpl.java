@@ -7,10 +7,12 @@ import com.ecommerce.inventory.dtos.requests.kafka.KafkaInventoryRequest;
 import com.ecommerce.inventory.dtos.responses.ProductInventoryResponse;
 import com.ecommerce.inventory.dtos.responses.kafka.KafkaEventInventory;
 import com.ecommerce.inventory.dtos.responses.kafka.KafkaShipmentItemResponse;
+import com.ecommerce.inventory.entities.InventoryTransactionEntity;
 import com.ecommerce.inventory.entities.ProductInventoryEntity;
 import com.ecommerce.inventory.exceptions.EnumError;
 import com.ecommerce.inventory.exceptions.ServiceException;
 import com.ecommerce.inventory.mappers.ProductInventoryMapper;
+import com.ecommerce.inventory.repositories.InventoryTransactionRepository;
 import com.ecommerce.inventory.repositories.ProductInventoryRepository;
 import com.ecommerce.inventory.services.ProductInventoryService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import java.util.UUID;
 public class ProductInventoryServiceImpl implements ProductInventoryService {
     private final ProductInventoryRepository productInventoryRepository;
     private final ProductInventoryMapper productInventoryMapper;
+    private final InventoryTransactionRepository inventoryTransactionRepository;
 
     @Override
     public ProductInventoryResponse create(KafkaInventoryRequest message) {
@@ -113,15 +116,16 @@ public class ProductInventoryServiceImpl implements ProductInventoryService {
 
     @Override
     public void recordTransaction(UUID orderId, UUID productId, int quantity, TransactionType type, String source) {
-
-    }
-
-    @Override
-    public void deductInventory(KafkaEventInventory message) {
         try {
-            List<KafkaShipmentItemResponse> listItems = message.getItems();
+            InventoryTransactionEntity inventoryTransactionEntity = InventoryTransactionEntity.builder()
+                    .source(source)
+                    .quantity(quantity)
+                    .productId(productId)
+                    .orderId(orderId)
+                    .type(type)
+                    .build();
 
-//            ProductInventoryEntity productInventory = productInventoryRepository.findProductInventoryByProductId(message.getItems());
+            inventoryTransactionRepository.save(inventoryTransactionEntity);
 
         } catch (Exception e) {
             throw new ServiceException(EnumError.INVENTORY_GET_ERROR,  "sys.internal.error");
@@ -129,17 +133,141 @@ public class ProductInventoryServiceImpl implements ProductInventoryService {
     }
 
     @Override
-    public void reserveInventory(KafkaEventInventory message) {
+    public void deductInventory(KafkaEventInventory message) {
+        log.info("Calling form shipping shipped service");
+        try {
 
+            for ( KafkaShipmentItemResponse itemResponse :  message.getItems()) {
+                UUID productId = itemResponse.getProductId();
+                String productName = itemResponse.getProductName();
+                Integer quantity = itemResponse.getQuantity();
+
+                ProductInventoryEntity productFound = productInventoryRepository.findProductInventoryByProductId(productId);
+
+                if (productFound == null) {
+                    log.error("[InventoryService] Product not found in inventory: {}", productId);
+                    throw new ServiceException(EnumError.INVENTORY_NOT_FOUND, "inventory.product.not.found");
+                }
+
+                // Kiểm tra đủ hàng hay không
+                if (productFound.getQuantityAvailable() < quantity) {
+                    log.warn("[InventoryService] Not enough stock for product {}. Available={}, Requested={}",
+                            productFound.getProductName(),
+                            productFound.getQuantityAvailable(),
+                            quantity);
+                    throw new ServiceException(EnumError.INVENTORY_NOT_ENOUGH, "inventory.not.enough.stock");
+                }
+
+                // Trừ đi số lượng tồn tại
+                int newAvailable = productFound.getQuantityAvailable() - quantity;
+                // Tăng số lượng giữ hàng
+                int newReserved = productFound.getQuantityReserved() + quantity;
+
+
+                productFound.setQuantityAvailable(newAvailable);
+                productFound.setQuantityReserved(newReserved);
+
+                productInventoryRepository.save(productFound);
+
+                recordTransaction(message.getOrderId(), productId, quantity, TransactionType.DEDUCT, "shipping service - shipped");
+
+                log.info("[InventoryService] Updated inventory for product {}: remaining={}",
+                        productFound.getProductName(),
+                        productFound.getQuantityAvailable());
+            }
+
+            log.info("[InventoryService] Inventory deduction completed for order: {}", message.getOrderId());
+
+        } catch ( ServiceException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            throw new ServiceException(EnumError.INVENTORY_GET_ERROR,  "sys.internal.error");
+        }
     }
+
 
     @Override
     public void releaseReserved(KafkaEventInventory message) {
+        log.info("Calling form shipping returned service");
 
+        try {
+            for ( KafkaShipmentItemResponse itemResponse : message.getItems()) {
+                UUID productId = itemResponse.getProductId();
+                String productName = itemResponse.getProductName();
+                Integer quantity = itemResponse.getQuantity();
+
+                ProductInventoryEntity productFound = productInventoryRepository.findProductInventoryByProductId(productId);
+
+                if (productFound == null) {
+                    log.error("[InventoryService] Product not found in inventory at restore: {}", productId);
+                    throw new ServiceException(EnumError.INVENTORY_NOT_FOUND, "inventory.product.not.found");
+                }
+
+                // Hồi số lượng tồn tại
+                int newAvailable = productFound.getQuantityAvailable() + quantity;
+                // giảm số lượng giữ hàng
+                int newReserved = productFound.getQuantityReserved() - quantity;
+
+
+                productFound.setQuantityAvailable(newAvailable);
+                productFound.setQuantityReserved(newReserved);
+
+                productInventoryRepository.save(productFound);
+
+                recordTransaction(message.getOrderId(), productId, quantity, TransactionType.RESTORE, "shipping service - returned");
+
+                log.info("[InventoryService] Updated inventory restore for product {}: remaining={}",
+                        productFound.getProductName(),
+                        productFound.getQuantityAvailable());
+            }
+        } catch (ServiceException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ServiceException(EnumError.INVENTORY_GET_ERROR, "sys.internal.error");
+        }
     }
 
     @Override
     public void confirmSold(KafkaEventInventory message) {
+        log.info("Calling form shipping completed service");
+        try {
+            for ( KafkaShipmentItemResponse itemResponse : message.getItems()) {
+                UUID productId = itemResponse.getProductId();
+                String productName = itemResponse.getProductName();
+                Integer quantity = itemResponse.getQuantity();
 
+                ProductInventoryEntity productFound = productInventoryRepository.findProductInventoryByProductId(productId);
+                InventoryTransactionEntity transactionFound = inventoryTransactionRepository.findInventoryTransactionByOrderId(message.getOrderId());
+
+                if (productFound == null) {
+                    log.error("[InventoryService] Product not found in inventory at confirm sold: {}", productId);
+                    throw new ServiceException(EnumError.INVENTORY_NOT_FOUND, "inventory.product.not.found");
+                }
+
+                if (transactionFound.getType() == TransactionType.DEDUCT) {
+                    log.error("[InventoryService] Product found in inventory at deduct: {}", productId);
+                    // Hồi số lượng giữ hàng
+                    int newReserved = productFound.getQuantityReserved() - quantity;
+                    // Tăng số lượng đã bán
+                    int newSold= productFound.getQuantitySold() + quantity;
+
+                    productFound.setQuantityReserved(newReserved);
+                    productFound.setQuantitySold(newSold);
+                }
+
+                productInventoryRepository.save(productFound);
+
+                recordTransaction(message.getOrderId(), productId, quantity, TransactionType.DEDUCT, "shipping service - completed");
+
+                log.info("[InventoryService] Updated inventory  confirm sold for product {}: remaining={}",
+                        productFound.getProductName(),
+                        productFound.getQuantityAvailable());
+            }
+        } catch (ServiceException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ServiceException(EnumError.INVENTORY_GET_ERROR, "sys.internal.error");
+        }
     }
 }

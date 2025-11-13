@@ -17,6 +17,7 @@ public enum EnumError {
     INVENTORY_SERVICE_UNAVAILABLE("INVENTORY-503", "inventory service unavailable", HttpStatus.SERVICE_UNAVAILABLE),
 
     INVALID_INVENTORY_METHOD("INVALID-METHOD", "Invalid inventory method", HttpStatus.NOT_FOUND),
+    INVENTORY_NOT_ENOUGH("INVENTORY_NOT_ENOUGH", "Not enough in inventory", HttpStatus.BAD_REQUEST),
 
     INVENTORY_PROCESS_NOTNULL("INVENTORY-PROCESS-NULL", "inventory argument be null!", HttpStatus.BAD_REQUEST),
     //----------- EXTERNAL SERVICES ------------

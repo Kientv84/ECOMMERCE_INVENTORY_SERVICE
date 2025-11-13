@@ -25,8 +25,6 @@ public interface ProductInventoryService {
 
     void deductInventory(KafkaEventInventory message);      // Trừ kho khi thanh toán
 
-    void reserveInventory(KafkaEventInventory message);     // Giữ hàng (COD hoặc đơn online)
-
     void releaseReserved(KafkaEventInventory message);      // Hoàn kho khi hủy hoặc bom hàng
 
     void confirmSold(KafkaEventInventory message);
