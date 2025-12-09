@@ -30,6 +30,10 @@ public class InventoryTransactionEntity {
     @Column(name = "id", updatable = false, nullable = false, columnDefinition = "uuid")
     private UUID id;
 
+    @Column(name = "transaction_code", unique = true)
+    private String transactionCode;
+
+
     @Column(name = "order_id", nullable = false)
     private UUID orderId;
 

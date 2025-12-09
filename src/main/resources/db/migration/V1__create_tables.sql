@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS product_inventory_entity (
 -- 2. Bảng inventory_transaction_entity
 CREATE TABLE IF NOT EXISTS inventory_transaction_entity (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_code VARCHAR(100) UNIQUE,
     order_id UUID NOT NULL,
     product_id UUID NOT NULL,
     quantity INT NOT NULL,
