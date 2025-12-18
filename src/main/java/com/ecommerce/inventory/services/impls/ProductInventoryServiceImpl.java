@@ -43,7 +43,7 @@ public class ProductInventoryServiceImpl implements ProductInventoryService {
             ProductInventoryEntity productInventoryEntity = ProductInventoryEntity.builder()
                     .productName(message.getProductName())
                     .productId(message.getProductId())
-                    .quantityAvailable(100)
+                    .quantityAvailable(message.getStock())
                     .quantityReserved(0)
                     .quantitySold(0)
                     .build();

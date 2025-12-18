@@ -1,7 +1,9 @@
 package com.ecommerce.inventory.messaging.consumers;
 
+import com.ecommerce.inventory.dtos.KafkaTemplate.KafkaEvent;
 import com.ecommerce.inventory.dtos.responses.kafka.KafkaEventInventory;
 import com.ecommerce.inventory.services.ProductInventoryService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,9 +26,18 @@ public class ShippingCompletedConsumer {
             log.info("[ShippingCompletedConsumer] Start consuming message ...");
             log.info("[ShippingCompletedConsumer] Received message payload: {}", message);
 
-            KafkaEventInventory response = new ObjectMapper().readValue(message, KafkaEventInventory.class);
 
-            productInventoryService.confirmSold(response);
+            ObjectMapper objectMapper = new ObjectMapper();
+
+            KafkaEvent<KafkaEventInventory> event =
+                    objectMapper.readValue(
+                            message,
+                            new TypeReference<KafkaEvent<KafkaEventInventory>>() {}
+                    );
+
+            KafkaEventInventory payload = event.getPayload();
+
+            productInventoryService.confirmSold(payload);
             log.info("[ShippingCompletedConsumer] Process inventory deduct ...");
         } catch (Exception e) {
             log.error("[onMessageHandler] Error while inventory deduct . Err {}", e.getMessage());

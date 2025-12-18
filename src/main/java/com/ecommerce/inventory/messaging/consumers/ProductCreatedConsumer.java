@@ -1,8 +1,10 @@
 package com.ecommerce.inventory.messaging.consumers;
 
+import com.ecommerce.inventory.dtos.KafkaTemplate.KafkaEvent;
 import com.ecommerce.inventory.dtos.requests.kafka.KafkaInventoryRequest;
 import com.ecommerce.inventory.dtos.responses.kafka.KafkaEventInventory;
 import com.ecommerce.inventory.services.ProductInventoryService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,9 +27,17 @@ public class ProductCreatedConsumer {
             log.info("[ProductCreatedConsumer] Start consuming message ...");
             log.info("[ProductCreatedConsumer] Received message payload: {}", message);
 
-            KafkaInventoryRequest response = new ObjectMapper().readValue(message, KafkaInventoryRequest.class);
+            ObjectMapper objectMapper = new ObjectMapper();
 
-            productInventoryService.create(response);
+            KafkaEvent<KafkaInventoryRequest> event =
+                    objectMapper.readValue(
+                            message,
+                            new TypeReference<KafkaEvent<KafkaInventoryRequest>>() {}
+                    );
+
+            KafkaInventoryRequest payload = event.getPayload();
+
+            productInventoryService.create(payload);
             log.info("[ProductCreatedConsumer] Process inventory created ...");
         } catch (Exception e) {
             log.error("[onMessageHandler] Error while inventory created . Err {}", e.getMessage());
